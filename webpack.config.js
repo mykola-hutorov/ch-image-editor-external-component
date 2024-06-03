@@ -2,6 +2,10 @@ const path = require("path");
 const glob = require("glob");
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const TerserPlugin = require("terser-webpack-plugin");
+const webpack = require("webpack");
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 function getConfig() {
     const entries = glob.globSync("./src/!(_*)/Index.{js,ts,jsx,tsx}").map(entryPath => [path.basename(path.dirname(entryPath)), `./${entryPath}`])
@@ -25,6 +29,12 @@ function getConfig() {
         },
         resolve: {
             extensions: ['.tsx', '.ts', '.jsx', '.js'],
+            fallback: {
+                'https': require.resolve('https-browserify'),
+                'url': require.resolve('url'),
+                'http': require.resolve('stream-http'),
+                'buffer': require.resolve('buffer/')
+            }
         },
         output: {
             filename: '[name].js',
@@ -33,6 +43,9 @@ function getConfig() {
                 type: "module"
             }
         },
+        plugins: [
+            new webpack.EnvironmentPlugin(['ENDPOINT', 'CLIENT_ID', 'CLIENT_SECRET', 'CHUSERNAME', 'CHPASSWORD'])
+        ],
         // plugins: [
         //     new CopyWebpackPlugin({
         //         patterns: [

@@ -1,97 +1,74 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import "tui-image-editor/dist/tui-image-editor.css";
+import { Stack } from "@mui/material";
 import ImageEditor from "@toast-ui/react-image-editor";
-import { UploadRequest } from "@sitecore/sc-contenthub-webclient-sdk/dist/models/upload/upload-request";
-import { ArrayBufferUploadSource } from "@sitecore/sc-contenthub-webclient-sdk/dist/models/upload/array-buffer-upload-source";
-import { Paper, Stack } from "@mui/material";
-import { decode } from "base64-arraybuffer";
 import { ImageEditorCustomPanel } from "./ImageEditorCustomPanel";
+import { loadImage, createAsset } from "./helpers";
+import "tui-image-editor/dist/tui-image-editor.css";
 
-const Editor = ({ config, imageUrl, uploadsClient, entitiesClient, notifier }) => {
-  const [imageObject, setImageObject] = useState(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [imageEditorInstance, setImageEditorInstance] = useState(null);
+const Editor = ({
+  client,
+  notifier,
+  editorConfig,
+  modifiedFileExtensions,
+  imageUrl,
+  currentAssetTitle,
+  currentFileName,
+}) => {
   const editorRef = useRef();
 
-  if (!imageUrl && config && config.editorConfig) {
-    return;
-  }
+  const [imageObject, setImageObject] = useState();
+  const [isOpen, setIsOpen] = useState(false);
+  const [imageEditorInstance, setImageEditorInstance] = useState();
+
+  const [assetTitle, setAssetTitle] = useState(currentAssetTitle);
+  const [fileName, setFileName] = useState(currentFileName);
+  const [fileExtension, setFileExtension] = useState(modifiedFileExtensions[0]);
 
   useEffect(() => {
-    if (isOpen && editorRef.current) {
+    if (isOpen && editorRef.current && fileName) {
       const instance = editorRef?.current?.getInstance();
       setImageEditorInstance(instance);
-
-      instance.loadImageFromURL(imageUrl, "image").then(() => {
-        instance.ui.activeMenuEvent();
-        notifier.notifySuccess("Image is successfully loaded.");
-      });
+      loadImage(notifier, instance, imageUrl, fileName);
     } else if (!isOpen) {
       setImageEditorInstance(null);
     }
   }, [isOpen, imageUrl]);
 
   useEffect(() => {
-    const createAsset = async () => {
-      if (!imageObject) {
-        return;
-      }
-
-      let pureBase64 = imageObject.imageBase64?.split(",")[1];
-      const uploadSource = new ArrayBufferUploadSource(
-        decode(pureBase64),
-        imageObject.fullName
-      );
-      const request = new UploadRequest(
-        uploadSource,
-        "AssetUploadConfiguration",
-        "NewAsset"
-      );
-      uploadsClient
-        .uploadAsync(request)
-        .then((data) => {
-          notifier.notifySuccess("Image successfully saved.");
-          console.info(data);
-        })
-        .catch((err) => {
-          notifier.notifyError(`Image upload error!`);
-          console.error(err);
-        });
-    };
-
-    createAsset();
-  }, [imageObject, uploadsClient]);
+    createAsset(notifier, client, imageObject, assetTitle);
+  }, [imageObject, client]);
 
   const onSave = useCallback(() => {
-    if (imageEditorInstance) {
-      const image = imageEditorInstance.toDataURL();
-      const name = `${imageEditorInstance.getImageName()}-${
-        Math.floor(Math.random() * 90000) + 10000
-      }.png`;
-      setImageObject({
-        imageBase64: image,
-        fullName: name,
-      });
-      notifier.notifyInfo(`Saving file as ${name}...`);
-    } else {
+    if (!imageEditorInstance) {
       notifier.notifyWarning("Image Editor Instance is empty!");
+      return;
     }
-  }, [imageEditorInstance]);
+
+    const image = imageEditorInstance.toDataURL();
+    const name = `${fileName}.${fileExtension}`;
+    setImageObject({
+      imageBase64: image,
+      fullName: name,
+    });
+    notifier.notifyInfo(`Saving file as ${name}...`);
+  }, [imageEditorInstance, fileName, fileExtension]);
 
   return (
     <Stack direction="column" spacing={2}>
       <ImageEditorCustomPanel
+        assetTitle={assetTitle}
+        fileName={fileName}
+        modifiedFileExtensions={modifiedFileExtensions}
         isOpen={isOpen}
         onOpen={() => setIsOpen(true)}
         onClose={() => setIsOpen(false)}
         onSave={onSave}
+        onAssetTitleChange={(e) => setAssetTitle(e.target.value)}
+        onFileNameChange={(e) => setFileName(e.target.value)}
+        onFileExtensionChange={(e) => setFileExtension(e.target.value)}
       />
 
-      {isOpen && (
-        <Paper elevation={1} square={false}>
-          <ImageEditor ref={editorRef} {...config.editorConfig} />
-        </Paper>
-      )}
+      {isOpen && <ImageEditor ref={editorRef} {...editorConfig} />}
     </Stack>
   );
 };
